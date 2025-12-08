@@ -37,6 +37,27 @@ Use these tools only in places where failures flow into a binary pass/fail outpu
 
 We're aiming for a dev-env-only regression harness, and an optimal environment for disposable coding
 
+The sidecar runs an nREPL server on **port 7888** for interactive development:
+
+```bash
+cd sidecar/clj
+clj -M -m sidecar.repl
+```
+
+Connect your editor to `localhost:7888` or use:
+```bash
+lein repl :connect 7888
+# or
+clj -M:nrepl
+```
+
+Quick verification commands:
+- `(check)` - Run all consistency checks
+- `(help)` - Show available commands
+- `(check-kv)` - Verify key-value store patterns
+
+
+
 #### regression harness: not CI: things only the dev needs to worry about
 
 #### disposable coding: I see you reaching for python to do some scripting in the background: try these instead
