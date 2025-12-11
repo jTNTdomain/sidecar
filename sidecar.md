@@ -62,6 +62,128 @@ Quick verification commands:
 
 #### disposable coding: I see you reaching for python to do some scripting in the background: try these instead
 
+## Agent Tooling for Disposable Computation
+
+When Claude needs to run throwaway code (data sampling, query building, exploration), use these tools in order of preference:
+
+### 1. nREPL (Port 7888) - For Domain Knowledge Access
+
+**Use when:** You need access to Sidecar domain knowledge, validators, or shared state.
+
+**Connection pattern:**
+```bash
+clojure -Sdeps '{:deps {nrepl/nrepl {:mvn/version "1.0.0"}}}' -M -e \
+'(do (require '"'"'nrepl.core)
+     (with-open [conn (nrepl.core/connect :port 7888)]
+       (-> (nrepl.core/client conn 1000)
+           (nrepl.core/message {:op "eval" :code "YOUR-CODE-HERE"})
+           nrepl.core/response-values
+           first)))'
+```
+
+**Examples:**
+```bash
+# Query domain knowledge
+clojure -Sdeps '{:deps {nrepl/nrepl {:mvn/version "1.0.0"}}}' -M -e \
+'(do (require '"'"'nrepl.core)
+     (with-open [conn (nrepl.core/connect :port 7888)]
+       (-> (nrepl.core/client conn 1000)
+           (nrepl.core/message {:op "eval" :code "(require '"'"'sidecar.domain-knowledge) (sidecar.domain-knowledge/query :property-types)"})
+           nrepl.core/response-values
+           first)))'
+
+# Sample data from API
+# (define function in REPL, then call it)
+
+# Build OpenSearch queries
+# (access query builders already loaded in REPL)
+```
+
+**Trade-offs:**
+- ✅ Access to all Sidecar namespaces and state
+- ✅ Can def vars that persist in the REPL session
+- ✅ Domain validators and infrastructure queries available
+- ❌ ~1-2s JVM startup cost per invocation
+- ❌ Output capture is simple (return values only)
+
+### 2. Babashka - For Fast Data Transformation
+
+**Use when:** You need fast Clojure execution without domain knowledge access.
+
+```bash
+bb -e '(-> (slurp "data.json")
+           (json/parse-string)
+           (get-in ["results"])
+           (take 10))'
+```
+
+**Examples:**
+```bash
+# Transform data
+bb -e '(->> (range 1 201) (map #(str "adid-" %)) (take 10))'
+
+# Process API responses
+bb -e '(-> (slurp "https://api/endpoint")
+           (json/parse-string)
+           (get "results"))'
+
+# Generate test data
+bb -e '(repeatedly 200 #(rand-int 10000))'
+```
+
+**Trade-offs:**
+- ✅ Fast startup (~50ms)
+- ✅ Rich standard library
+- ✅ Good for data pipelines
+- ❌ No access to Sidecar domain knowledge
+- ❌ No persistent state between calls
+
+### 3. Command Line Tools - For Simple Operations
+
+**Use when:** A standard Unix tool is the right abstraction.
+
+```bash
+# HTTP requests
+curl -s "https://api/endpoint" | jq '.results[].id'
+
+# File operations
+grep -r "pattern" src/
+
+# Git operations
+git log --oneline -10
+```
+
+**Trade-offs:**
+- ✅ Instant execution
+- ✅ Composable with pipes
+- ✅ Often the clearest solution
+- ❌ Limited data transformation
+- ❌ Bash quoting/escaping complexity
+
+## Decision Tree
+
+```
+Do you need Sidecar domain knowledge/validators/state?
+  YES → Use nREPL (port 7888)
+  NO → ↓
+
+Is this data transformation/processing?
+  YES → Use Babashka
+  NO → ↓
+
+Is this a simple system operation (HTTP, file, git)?
+  YES → Use command line tools
+  NO → Reconsider if Babashka or nREPL applies
+```
+
+## Important Notes
+
+- **Avoid Python scripts** for disposable work - usually Clojure tooling is better
+- **Avoid bash scripts** that should be Clojure - prefer bb or nREPL
+- **Do use command line tools** when they're the right abstraction (curl, jq, git, grep)
+- **Avoid script files unless they persist** - disposable computation should be inline
+- User sees results, not intermediate computation (unless explicitly shown)
+
 Never assume my comprehension has increased just because yours has.  Always tailor mainline work to my previously demonstrated review bandwidth. Agents should behave like a mathematician with a supercomputer, providing digestible conclusions, never assuming you share the internal machinery. Our aim is to expand the agent’s power without expanding the human review burden.
 
 
